@@ -1,0 +1,47 @@
+name: Dependency Audit
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: [8.1, 8.2]
+        node-version: [18, 20]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP ${{ matrix.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+
+      - name: Validate Composer files
+        run: composer validate --no-check-publish --working-dir=core
+
+      - name: Check Composer outdated (fail on outdated direct dependencies)
+        run: composer outdated --direct --strict --working-dir=core
+
+      - name: Audit Composer dependencies in contrib modules
+        run: |
+          find modules/contrib -name composer.json -execdir composer validate --no-check-publish \;
+          find modules/contrib -name composer.json -execdir composer outdated --direct --strict \;
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install JS dependencies (Yarn)
+        run: |
+          cd core
+          yarn install --immutable
+
+      - name: Audit JavaScript dependencies (fail on moderate+ vulnerabilities)
+        run: |
+          cd core
+          yarn npm audit --groups dependencies --level moderate
